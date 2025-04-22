@@ -95,6 +95,7 @@ class Speech:
             with AudioToTextRecorder(
                 spinner=True,
                 model=self.args['model_name'],
+                device='cpu',
                 language=self.args['lang'],
                 compute_type="float32",
                 #enable_realtime_transcription=True,
