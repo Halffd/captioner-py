@@ -1,8 +1,13 @@
+import os
 import sys
+cpu_threads = os.cpu_count()
+os.environ["OMP_NUM_THREADS"] = str(cpu_threads)
+os.environ["MKL_NUM_THREADS"] = str(cpu_threads)
+os.environ["NUMEXPR_NUM_THREADS"] = str(cpu_threads)
+os.environ["OMP_WAIT_POLICY"] = "ACTIVE"  # Better performance
 from RealtimeSTT import AudioToTextRecorder
 from pynput import keyboard
 import threading
-import os
 import signal
 import caption.web as web
 import caption.gui as gui
@@ -10,6 +15,9 @@ import caption.input as input
 import caption.log as log
 import logging
 import atexit
+
+# Suppress ALSA warnings
+os.environ['ALSA_CARD'] = 'default'
 
 DEBUG = False
 if DEBUG:
@@ -97,13 +105,14 @@ class Speech:
                 model=self.args['model_name'],
                 device='cpu',
                 language=self.args['lang'],
-                compute_type="float32",
+                beam_size=3,
+                compute_type="int8", #"float32",
                 #enable_realtime_transcription=True,
                 realtime_model_type=self.args['realtime_model'],
                 #level=logging.DEBUG,
                 debug_mode=True,
                 webrtc_sensitivity=0, #if self.args['lang'] is None or 
-                min_length_of_recording=self.get_min_length_of_recording(), #0.2 if 'en' in self.args['lang'] else 3 if 'base' in self.args['model_name'] or 'tiny' in self.args['model_name'] else 10,
+                min_length_of_recording=self.get_min_length_of_recording() / 2, #0.2 if 'en' in self.args['lang'] else 3 if 'base' in self.args['model_name'] or 'tiny' in self.args['model_name'] else 10,
                 silero_sensitivity=0.1,
                 min_gap_between_recordings=0.4,
                 post_speech_silence_duration = 0.16 / self.recording_scale

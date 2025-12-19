@@ -1,0 +1,10 @@
+--index-url https://pypi.org/simple
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchaudio
+faster-whisper
+ctranslate2
+RealtimeSTT
+pynput
+webrtcvad
+flask
