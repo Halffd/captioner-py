@@ -48,7 +48,7 @@ class Speech:
         self.transcribed_text.append(text)
         if self.ui:
             try:
-                self.ui.addNewLine(text)
+                self.ui.newLineSignal.emit(text)
             except Exception as e:
                 print(f"Error adding new line to UI: {e}")
 
@@ -105,14 +105,14 @@ class Speech:
                 model=self.args['model_name'],
                 device='cpu',
                 language=self.args['lang'],
-                beam_size=3,
+                #beam_size=3,
                 compute_type="int8", #"float32",
                 #enable_realtime_transcription=True,
                 realtime_model_type=self.args['realtime_model'],
                 #level=logging.DEBUG,
                 debug_mode=True,
                 webrtc_sensitivity=0, #if self.args['lang'] is None or 
-                min_length_of_recording=self.get_min_length_of_recording() / 2, #0.2 if 'en' in self.args['lang'] else 3 if 'base' in self.args['model_name'] or 'tiny' in self.args['model_name'] else 10,
+                min_length_of_recording=self.get_min_length_of_recording() / 3, #0.2 if 'en' in self.args['lang'] else 3 if 'base' in self.args['model_name'] or 'tiny' in self.args['model_name'] else 10,
                 silero_sensitivity=0.1,
                 min_gap_between_recordings=0.4,
                 post_speech_silence_duration = 0.16 / self.recording_scale
@@ -125,22 +125,12 @@ class Speech:
             self.stop = True
         except Exception as e:
             print(f"Error in transcription: {e}")
-        finally:
-            # Use os._exit only if normal exit fails
-            try:
-                if self.stop:
-                    sys.exit(0)
-                else:
-                    os._exit(0)
-            except:
-                os._exit(0)
 
     def start(self):
         control = input.Input(self.args)
         logger = log.Log(self.args)
         
         transcription_thread = threading.Thread(target=self.main_program)
-        transcription_thread.daemon = True  # Mark as daemon so it doesn't prevent program exit
         transcription_thread.start()
 
         try:

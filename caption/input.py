@@ -33,27 +33,27 @@ class Input:
 
     def increase_font_size(self):
         """Increase the font size."""
-        self.gui.zoomIn()
+        if self.gui: self.gui.zoomInSignal.emit()
     def decrease_font_size(self):
         """Decrease the font size."""
-        self.gui.zoomOut()
+        if self.gui: self.gui.zoomOutSignal.emit()
 
     def clear_text(self):
         """Clear the text."""
-        self.gui.clear()
+        if self.gui: self.gui.clearEmit()
 
     def move_monitor(self):
-        self.gui.move_monitor()
+        if self.gui: self.gui.moveMonitorSignal.emit()
 
     def toggle_top(self):
-        self.gui.toggleTop()
+        if self.gui: self.gui.toggleTopSignal.emit()
 
     def increase_transparency(self):
         """Increase transparency."""
-        self.gui.transparencyAdd()
+        if self.gui: self.gui.transparencyAddSignal.emit()
     def decrease_transparency(self):
         """Decrease transparency."""
-        self.gui.transparencySub()
+        if self.gui: self.gui.transparencySubSignal.emit()
 # Example usage
 if __name__ == "__main__":
     input_handler = Input(sys.argv)

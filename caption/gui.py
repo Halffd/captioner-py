@@ -13,8 +13,22 @@ class CaptionerGUI(QMainWindow):
     mouseMovePos = None
 
     clearSignal = pyqtSignal()
+    newLineSignal = pyqtSignal(str)
+    zoomInSignal = pyqtSignal()
+    zoomOutSignal = pyqtSignal()
+    moveMonitorSignal = pyqtSignal()
+    toggleTopSignal = pyqtSignal()
+    transparencyAddSignal = pyqtSignal()
+    transparencySubSignal = pyqtSignal()
     def __init__(self):
         super().__init__()
+        self.newLineSignal.connect(self.addNewLine)
+        self.zoomInSignal.connect(self.zoomIn)
+        self.zoomOutSignal.connect(self.zoomOut)
+        self.moveMonitorSignal.connect(self.move_monitor)
+        self.toggleTopSignal.connect(self.toggleTop)
+        self.transparencyAddSignal.connect(self.transparencyAdd)
+        self.transparencySubSignal.connect(self.transparencySub)
         self.lines = []
         self.fontSize = 55
         self.alpha = 128
@@ -316,6 +330,7 @@ class CaptionerGUI(QMainWindow):
         csim = cosine_similarity(vectors)
         return any(csim[0][i] > threshold for i in range(1, len(csim)))
     
+    @pyqtSlot(str)
     def addNewLine(self, text):
         if len(self.lines) > 0:
             # Normalize the incoming text
@@ -361,14 +376,12 @@ class CaptionerGUI(QMainWindow):
             # If the scroll bar is already at the bottom, update the value to the maximum
             if current_value == max_value:
                 QMetaObject.invokeMethod(self, "call_adjust_size", Qt.QueuedConnection)
-                QApplication.processEvents()  # Process all pending events, ensuring the layout is updated
                 self.previous_value = self.max_value
             else:
                 # Check if the scroll position has changed
                 if current_value == self.previous_value or self.previous_value < 0:
                     # Scroll to the bottom of the content
                     QMetaObject.invokeMethod(self, "call_adjust_size", Qt.QueuedConnection)
-                    QApplication.processEvents()  # Process all pending events, ensuring the layout is updated
                     
                     self.previous_value = self.max_value
         self.scrolling = False
