@@ -1,5 +1,6 @@
 import os
 from datetime import date, datetime
+import time
 
 class Log:
     """A class for logging messages to a file with date management."""
@@ -7,7 +8,7 @@ class Log:
     def __init__(self, args, path = '', log_dir = 'Logs', filename = '', test = 'test', unique = True):
         """
         Initializes the Log object.
-        
+
         Args:
             args (dict): Dictionary containing logging parameters.
         """
@@ -20,51 +21,10 @@ class Log:
         self.test = None
         self.current_date = None  # Track the current date
         self.encoding = 'utf-8'  # Specify the encoding
-        date_str = datetime.now().strftime("%d-%m-%Y")
-        logdir = os.path.join(self.path, self.log_dir)
-        if not os.path.exists(logdir):
-            try:
-                os.makedirs(logdir, exist_ok=True)
-            except:
-                logdir = os.getcwd()
-        try:
-            # Assuming self.path, self.log_dir, and self.filename are already defined
-            matching_files = [
-                item for item in os.listdir(logdir)
-                if item.startswith(date_str)
-            ]
-        except Exception as e:
-            matching_files = []
-        # Define the lambda function to find unique parts in file paths
-        
-        find_unique_parts = lambda path1, path2: (
-            (set(part for part in os.path.splitext(os.path.basename(path1))[0].replace('-', '_').replace('+','_').replace('.', '_').split('_') if part),
-            set(part for part in os.path.splitext(os.path.basename(path2))[0].replace('-', '_').replace('+','_').replace('.', '_').split('_') if part)
-            )
-        )
-        if len(matching_files) > 0 and unique:
-            for file in matching_files:
-                file_path = os.path.join(self.path, self.log_dir, self.filename)
-                match_path = os.path.join(self.path, self.log_dir, file)
-                if os.path.exists(match_path):        # Process the file since it doesn't exist
-                    if file_path != match_path:
-                        # Get unique parts
-                        unique_parts = find_unique_parts(file_path, match_path)
-                        # Calculate unique parts
-                        unique_to_file = unique_parts[0] - unique_parts[1]
-                        parts = os.path.splitext(os.path.basename(match_path))
-                        if len(unique_to_file) < 1 or unique_to_file == set():
-                            self.filename = parts[0].split('_')[1]
-                            continue
-                        #unique_to_match = unique_parts[1] - unique_parts[0]
-                        self.filename = parts[0] + '-' + '+'.join(unique_to_file) + parts[1]
-                        self.file_path = os.path.join(self.path, self.log_dir, self.filename)
-                        os.rename(match_path, self.file_path)
-                        time = datetime.now().strftime("%H:%M:%S")
-                        self.file = open(self.file_path, 'a', encoding=self.encoding)
-                        self.file.write(f'\n{args["model_name"]} + {args["lang"]}\n{date_str} {time} :  {args}\n')
-        if not self.file:
-            self.create_log_file()
+
+        # For the new system, we don't need to search for existing files with similar names
+        # Each log file will have a unique timestamp in its name
+        self.create_log_file()
     def set_path(self, path):
         """Sets the path for log files."""
         self.path = path
@@ -89,17 +49,34 @@ class Log:
             return os.getcwd()
 
     def create_log_file(self):
-        """Creates a new log file for the current date."""
-        log_dir_path = self.create_log_dir()
+        """Creates a new log file for the current date/time."""
         today = date.today()
         now = datetime.now()
         formatted_date = today.strftime("%d-%m-%Y")
         formatted_time = now.strftime("%H:%M:%S")
         weekday = now.strftime("%A")
-        self.file_path = os.path.join(log_dir_path, f"{formatted_date}_{self.filename}.log")
+
+        # Create directory path in the format: year/month/day
+        year = now.strftime("%Y")
+        month = now.strftime("%m")
+        day = now.strftime("%d")
+
+        # Create the log directory path
+        log_dir_path = os.path.join(self.path, self.log_dir, year, month, day)
+        try:
+            os.makedirs(log_dir_path, exist_ok=True)
+        except Exception as e:
+            print(f"Could not create nested log directory: {e}")
+            # Fallback to original directory
+            log_dir_path = self.create_log_dir()
+
+        # Format filename as: day-hh-mm-ss_modelname.log
+        time_part = now.strftime("%d-%H-%M-%S")
+        self.file_path = os.path.join(log_dir_path, f"{time_part}_{self.filename}.log")
 
         if self.test_name:
-            test_file_path = os.path.join(log_dir_path, f"{self.test_name}.txt")
+            # Also put test file in the same nested directory
+            test_file_path = os.path.join(log_dir_path, f"{time_part}_{self.test_name}.txt")
             try:
                 os.makedirs(os.path.dirname(test_file_path), exist_ok=True)
                 self.test = open(test_file_path, 'w', encoding=self.encoding)
@@ -116,7 +93,7 @@ class Log:
                 self.file = open(self.file_path, 'w', encoding=self.encoding)
                 self.file.write(f"{weekday} {formatted_date} {formatted_time}\n")
                 self.file.write(f"Args: {self.args}\n")
-            
+
             # Set the current date after creating the log file
             self.current_date = today
         except Exception as e:
