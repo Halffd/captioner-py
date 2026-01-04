@@ -8,3 +8,6 @@ RealtimeSTT
 pynput
 webrtcvad
 flask
+fugashi
+jaconv
+unidic-lite

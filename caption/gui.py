@@ -1,13 +1,14 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget, QStyleOption, QStyle, QScrollArea, QDesktopWidget, QShortcut, QSizePolicy
 from PyQt5.QtCore import Qt, QRect, QSize, QPoint, pyqtSignal, pyqtSlot, QEvent, QMetaObject, Q_ARG
-from PyQt5.QtGui import QPainter, QColor, QCursor, QKeySequence
+from PyQt5.QtGui import QPainter, QColor, QCursor, QKeySequence, QTextDocument
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import textwrap
 
 import string
 import os
+import re
 class CaptionerGUI(QMainWindow):
     mousePressPos = None
     mouseMovePos = None
@@ -56,6 +57,17 @@ class CaptionerGUI(QMainWindow):
         self.recording_enabled = True
         self.initUI()
 
+        # Check if required library for Japanese text processing is available
+        self.japanese_processing_available = False
+        try:
+            import fugashi  # Japanese morphological analyzer
+            import jaconv   # Japanese converter
+            self.japanese_processing_available = True
+            self.tagger = fugashi.Tagger()  # Initialize Japanese morphological analyzer
+        except ImportError:
+            print("Note: Japanese text processing requires 'fugashi' and 'jaconv' libraries.")
+            print("Install with: pip install fugashi jaconv")
+
     def initUI(self):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -75,6 +87,7 @@ class CaptionerGUI(QMainWindow):
         self.caption_label.setWordWrap(True)
         self.caption_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.caption_label.setCursor(Qt.IBeamCursor)
+        self.caption_label.setTextFormat(Qt.RichText)  # Enable HTML formatting for ruby tags
 
         self.scroll_area.setWidget(self.caption_label)
         layout.addWidget(self.scroll_area)
@@ -625,25 +638,97 @@ class CaptionerGUI(QMainWindow):
             if self.is_similar(normalized_text, normalized_lines):
                 return
 
+        # Process text for furigana if it's Japanese
+        processed_text = self.process_text_with_furigana(text)
+
         # Handle text length limit and specific languages
         #if len(text) > self.textLimit and self.language not in ['zh-CN', 'zh-TW', 'ja', 'th', 'my', 'lo', 'km', 'bo', 'mn', 'mn-Mong', 'dz', 'aii']:
             # Split the text into multiple lines without splitting words
         #    lines = textwrap.wrap(text, width=self.textLimit, break_long_words=False)
         #    self.lines.extend(lines)
         #else:
-        self.lines.append(text)
+        self.lines.append(processed_text)
 
         # Ensure the number of lines does not exceed the limit
         if self.lineLimit > 0:
             while len(self.lines) > self.lineLimit:
                 del self.lines[0]
 
+        # Use setTextFormat to support HTML content with ruby tags
         self.caption_label.setText('\n'.join(self.lines))
         # Write log in a separate thread to avoid blocking the UI
         if self.log:
             QMetaObject.invokeMethod(self, "_write_log", Qt.QueuedConnection,
                                     Q_ARG(str, text))
         self.update_scroll_position()
+
+    def contains_japanese(self, text):
+        """
+        Checks if the text contains Japanese characters (Hiragana, Katakana, Kanji).
+        """
+        # Regular expression to match Japanese characters
+        japanese_pattern = re.compile(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]')
+        return bool(japanese_pattern.search(text))
+
+    def add_furigana_ruby_html(self, text):
+        """
+        Adds furigana to Japanese text using HTML ruby tags or fallback format.
+        """
+        if not self.japanese_processing_available:
+            return text
+
+        try:
+            # Use the tagger to analyze the text
+            result = self.tagger.parse(text)
+            processed_parts = []
+
+            for line in result.split("\n"):
+                if line.strip() == "EOS" or line.strip() == "":
+                    continue
+
+                parts = line.split("\t")
+                if len(parts) < 2:
+                    continue
+
+                surface = parts[0]  # The surface form (what you see)
+                feature_str = parts[1]  # The feature string
+
+                # Parse the feature string
+                features = feature_str.split(",")
+
+                # Extract the reading (yomi) - typically in position 7 for UniDic
+                # For different dictionaries, it might be different positions
+                if len(features) > 7 and features[7] and features[7] != "*" and features[7] != surface:
+                    # Get the reading
+                    reading = features[7]
+
+                    # Check if the surface form contains kanji
+                    if self.contains_japanese(surface) and any('\u4e00' <= c <= '\u9fff' for c in surface):
+                        # Qt's HTML support for ruby tags might be limited
+                        # Using a more compatible format that shows furigana clearly
+                        processed_parts.append(f'{surface}({reading})')
+                        # Keep HTML ruby as comment for when better support is available
+                        # processed_parts.append(f'<ruby>{surface}<rt>{reading}</rt></ruby>')
+                    else:
+                        processed_parts.append(surface)
+                else:
+                    # No reading available, just add the surface
+                    processed_parts.append(surface)
+
+            # Join the processed parts
+            return "".join(processed_parts) if processed_parts else text
+        except Exception as e:
+            # If processing fails, return the original text
+            print(f"Furigana processing error: {e}")
+            return text
+
+    def process_text_with_furigana(self, text):
+        """
+        Process text to add furigana if it contains Japanese characters.
+        """
+        if self.contains_japanese(text):
+            return self.add_furigana_ruby_html(text)
+        return text
 
     @pyqtSlot(str)
     def _write_log(self, text):
