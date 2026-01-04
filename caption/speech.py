@@ -31,19 +31,29 @@ class Speech:
         self.stop = False
         self.recorder = None
         self.recording_scale = 1.25
+        self.recording_enabled = True
         # Register cleanup handler
         atexit.register(self.cleanup)
+
+    def toggle_recording(self):
+        self.recording_enabled = not self.recording_enabled
+        if self.ui:
+            self.ui.updateRecordingStatus(self.recording_enabled)
 
     def cleanup(self):
         """Clean up resources on exit"""
         self.stop = True
         if self.recorder:
             try:
+                # Stop the recorder with a timeout to prevent hanging
                 self.recorder.stop()
-            except:
+            except Exception as e:
+                print(f"Error stopping recorder: {e}")
                 pass
 
     def process_text(self, text):
+        if not self.recording_enabled:
+            return
         print(text, end=" ", flush=True)
         self.transcribed_text.append(text)
         if self.ui:
@@ -100,31 +110,63 @@ class Speech:
     
     def main_program(self):
         try:
-            with AudioToTextRecorder(
+            import time
+            print("Initializing audio recorder...")
+            # Initialize the recorder with current settings
+            recorder = AudioToTextRecorder(
                 spinner=True,
                 model=self.args['model_name'],
                 device='cpu',
                 language=self.args['lang'],
-                #beam_size=3,
-                compute_type="int8", #"float32",
-                #enable_realtime_transcription=True,
+                enable_realtime_transcription=self.args['realtime'],
+#                use_microphone=self.args['use_microphone'],
+#                model_path=None,
                 realtime_model_type=self.args['realtime_model'],
                 #level=logging.DEBUG,
                 debug_mode=True,
-                webrtc_sensitivity=0, #if self.args['lang'] is None or 
-                min_length_of_recording=self.get_min_length_of_recording() / 3, #0.2 if 'en' in self.args['lang'] else 3 if 'base' in self.args['model_name'] or 'tiny' in self.args['model_name'] else 10,
+                webrtc_sensitivity=0,
+                min_length_of_recording=self.get_min_length_of_recording() / 3,
                 silero_sensitivity=0.1,
                 min_gap_between_recordings=0.4,
                 post_speech_silence_duration = 0.16 / self.recording_scale
-            ) as recorder:
-                self.recorder = recorder
-                print("> ", end="", flush=True)
-                while not self.stop:
+            )
+
+            # Store the recorder in the instance
+            self.recorder = recorder
+
+            print("Audio recorder initialized. Starting transcription. Say something...")
+
+            print("> ", end="", flush=True)
+            while not self.stop:
+                try:
+                    # Process text from the recorder
+                    # The RealtimeSTT library's text() method blocks until a full sentence/phrase is detected
+                    # Check stop flag before each blocking call
+                    if self.stop:
+                        break
                     recorder.text(self.process_text)
+                except Exception as e:
+                    if self.stop:
+                        break
+                    print(f"Error in recording: {e}")
+                    # Short sleep to allow other threads to process stop commands
+                    time.sleep(0.01)
+
         except KeyboardInterrupt:
+            print("Keyboard interrupt received")
             self.stop = True
         except Exception as e:
             print(f"Error in transcription: {e}")
+            print("This may be due to missing audio devices. Ensure audio is properly configured.")
+        finally:
+            # Clean up the recorder
+            if self.recorder:
+                try:
+                    self.recorder.stop()
+                    print("Audio recorder stopped")
+                except:
+                    pass
+                self.recorder = None
 
     def start(self):
         control = input.Input(self.args)

@@ -7,6 +7,8 @@ if __name__ == "__main__":
     try:
         args = model.getName(sys.argv, 'base', True)
         if args:
+            args['realtime'] = False if '-nrt' in args else True
+            args['use_microphone'] = True
             caption = speech.Speech(args)
             caption.start()
     except KeyboardInterrupt:
