@@ -175,7 +175,7 @@ class Speech:
         control = input.Input(self.args)
         logger = log.Log(self.args)
 
-        transcription_thread = threading.Thread(target=self.main_program, daemon=True)
+        transcription_thread = threading.Thread(target=self.main_program)
         transcription_thread.start()
 
         try:
@@ -189,8 +189,8 @@ class Speech:
             elif self.args.get('web', False):
                 web.Web(self.args).start_server()
 
-            # Don't wait for transcription thread to complete since it might be blocked
-            # The daemon thread will be automatically terminated when the main program exits
+            # Wait for transcription to complete with a timeout to avoid hanging on exit
+            transcription_thread.join(timeout=2.0)  # Wait up to 2 seconds for clean exit
         except KeyboardInterrupt:
             print("\nReceived keyboard interrupt. Exiting...")
         except Exception as e:
