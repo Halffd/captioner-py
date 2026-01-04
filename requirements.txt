@@ -2,12 +2,13 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch
 torchaudio
-faster-whisper
-ctranslate2
-RealtimeSTT
+faster-whisper>=0.10.0
+ctranslate2>=4.0.0
+RealtimeSTT>=0.2.0
 pynput
 webrtcvad
 flask
-fugashi
-jaconv
-unidic-lite
+fugashi>=1.0.0
+jaconv>=0.3.0
+unidic-lite>=1.0.0
+tqdm>=4.62.0
