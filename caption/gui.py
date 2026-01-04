@@ -449,16 +449,28 @@ class CaptionerGUI(QMainWindow):
         #print(self.speech)
         self.write("End")
         if self.log:
-            self.log.close_log_file()
+            try:
+                self.log.close_log_file()
+            except:
+                pass
         if self.speech:
             self.speech.stop = True
-            #print(self.speech.stop)
             if self.speech.recorder:
                 try:
-                    # Stop the recorder with a quick timeout to avoid hanging
+                    # Force stop the recorder
                     self.speech.recorder.stop()
+                    # Set recorder to None to ensure it's cleaned up
+                    self.speech.recorder = None
                 except:
                     pass  # Continue to quit even if recorder stop fails
+            # Also set speech to None to ensure cleanup
+            self.speech = None
+        # Close and delete all UI elements to ensure cleanup
+        try:
+            self.close()  # Close the main window
+            self.deleteLater()  # Schedule for deletion
+        except:
+            pass
         # Quit the application
         QApplication.quit()
         import sys
