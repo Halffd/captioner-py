@@ -469,8 +469,24 @@ class CaptionerGUI(QMainWindow):
             pass
         # Quit the application
         QApplication.quit()
+
+        # Schedule a forceful termination if the application doesn't exit within 2 seconds
         import sys
-        # Exit the Python interpreter to ensure termination
+        import os
+        import signal
+        import threading
+
+        def force_quit():
+            import time
+            time.sleep(2)  # Wait 2 seconds
+            # If we reach this point, the app didn't exit gracefully
+            os.kill(os.getpid(), signal.SIGKILL)
+
+        # Start the force quit in a separate daemon thread so it doesn't prevent exit
+        force_thread = threading.Thread(target=force_quit, daemon=True)
+        force_thread.start()
+
+        # Exit the Python interpreter to allow graceful termination
         sys.exit(0)
         """if os.name == 'nt':
             os._exit(1)
