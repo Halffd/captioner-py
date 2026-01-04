@@ -479,11 +479,11 @@ class CaptionerGUI(QMainWindow):
 
                 except:
                     pass  # Continue to quit even if setting up the thread fails
-        # Force quit the application with SIGKILL
-        import os
-        import signal
+        # Quit the application gracefully
         QApplication.quit()
-        os.kill(os.getpid(), signal.SIGKILL)
+        import sys
+        # Exit the Python interpreter to ensure clean termination
+        sys.exit(0)
         """if os.name == 'nt':
             os._exit(1)
         else:
