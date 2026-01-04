@@ -88,7 +88,7 @@ class Log:
         try:
             if os.path.exists(self.file_path):
                 self.file = open(self.file_path, 'a', encoding=self.encoding)
-                self.file.write(f"\n{formatted_time} Rerun\n")
+                self.file.write(f"\n{formatted_time}\n")
             else:
                 self.file = open(self.file_path, 'w', encoding=self.encoding)
                 self.file.write(f"{weekday} {formatted_date} {formatted_time}\n")
@@ -132,7 +132,7 @@ class Log:
             if file is None or file.closed:
                 return
                 
-            file.write(f"{current_time} ({message})\n")
+            file.write(f"{current_time} {message}\n")
             file.flush()  # Ensure data is written to disk
         except Exception as e:
             # Silently handle errors to prevent app crashes
