@@ -1,6 +1,6 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget, QStyleOption, QStyle, QScrollArea, QDesktopWidget, QShortcut, QSizePolicy
-from PyQt5.QtCore import Qt, QRect, QSize, QPoint, pyqtSignal, pyqtSlot, QEvent, QMetaObject
+from PyQt5.QtCore import Qt, QRect, QSize, QPoint, pyqtSignal, pyqtSlot, QEvent, QMetaObject, Q_ARG
 from PyQt5.QtGui import QPainter, QColor, QCursor, QKeySequence
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -20,6 +20,9 @@ class CaptionerGUI(QMainWindow):
     toggleTopSignal = pyqtSignal()
     transparencyAddSignal = pyqtSignal()
     transparencySubSignal = pyqtSignal()
+    resizeWidthSignal = pyqtSignal(int)
+    resizeHeightSignal = pyqtSignal(int)
+    changeSettingsSignal = pyqtSignal()
     def __init__(self):
         super().__init__()
         self.newLineSignal.connect(self.addNewLine)
@@ -29,6 +32,9 @@ class CaptionerGUI(QMainWindow):
         self.toggleTopSignal.connect(self.toggleTop)
         self.transparencyAddSignal.connect(self.transparencyAdd)
         self.transparencySubSignal.connect(self.transparencySub)
+        self.resizeWidthSignal.connect(self.resizeWidth)
+        self.resizeHeightSignal.connect(self.resizeHeight)
+        self.changeSettingsSignal.connect(self.changeSettings)
         self.lines = []
         self.fontSize = 55
         self.alpha = 128
@@ -47,6 +53,7 @@ class CaptionerGUI(QMainWindow):
         self.language = 'en'
         self.speech = None
         self.log = None
+        self.recording_enabled = True
         self.initUI()
 
     def initUI(self):
@@ -79,17 +86,33 @@ class CaptionerGUI(QMainWindow):
         
         self.setup_geometry()
         # Create shortcuts for the global hotkeys
-        end_shortcut = QShortcut(QKeySequence(Qt.CTRL + Qt.Key_Q), self)
-        end_shortcut.activated.connect(self.end)
-
-        self.esc_shortcut = QShortcut(QKeySequence(Qt.Key_Escape), self)
-        self.esc_shortcut.activated.connect(self.end)
         
         zoom_in_shortcut = QShortcut(QKeySequence(Qt.Key_Equal), self)
         zoom_in_shortcut.activated.connect(self.zoomIn)
 
+        # Also support Shift+Equals for font size
+        shift_plus_shortcut = QShortcut(QKeySequence(Qt.SHIFT + Qt.Key_Plus), self)
+        shift_plus_shortcut.activated.connect(self.zoomIn)
+
+        # Use different shortcuts for window resizing to avoid conflicts
+        shift_equals_shortcut = QShortcut(QKeySequence("Shift+="), self)
+        shift_equals_shortcut.activated.connect(lambda: self.resizeWidth(50))
+
+        shift_underscore_shortcut = QShortcut(QKeySequence("Shift+_"), self)
+        shift_underscore_shortcut.activated.connect(lambda: self.resizeWidth(-50))
+
+        ctrl_up_shortcut = QShortcut(QKeySequence(Qt.CTRL + Qt.Key_Up), self)
+        ctrl_up_shortcut.activated.connect(lambda: self.resizeHeight(50))
+
+        ctrl_down_shortcut = QShortcut(QKeySequence(Qt.CTRL + Qt.Key_Down), self)
+        ctrl_down_shortcut.activated.connect(lambda: self.resizeHeight(-50))
+
         zoom_out_shortcut = QShortcut(QKeySequence(Qt.Key_Minus), self)
         zoom_out_shortcut.activated.connect(self.zoomOut)
+
+        # Also support Shift+Minus for font size
+        shift_minus_shortcut = QShortcut(QKeySequence(Qt.SHIFT + Qt.Key_Minus), self)
+        shift_minus_shortcut.activated.connect(self.zoomOut)
 
         top_shortcut = QShortcut(QKeySequence(Qt.Key_Home), self)
         top_shortcut.activated.connect(self.toTop)
@@ -97,25 +120,48 @@ class CaptionerGUI(QMainWindow):
         bottom_shortcut = QShortcut(QKeySequence(Qt.Key_End), self)
         bottom_shortcut.activated.connect(self.toBottom)
         
-        transparency_add_shortcut = QShortcut(QKeySequence(Qt.Key_0), self)
-        transparency_add_shortcut.activated.connect(self.transparencyAdd)
+        # 9 to increase transparency (make more see-through), 0 to decrease transparency (make less see-through/more opaque)
+        transparency_9_shortcut = QShortcut(QKeySequence(Qt.Key_9), self)
+        transparency_9_shortcut.activated.connect(self.transparencySub)  # 9 to make more transparent (decrease alpha)
 
-        transparency_sub_shortcut = QShortcut(QKeySequence(Qt.Key_9), self)
-        transparency_sub_shortcut.activated.connect(self.transparencySub)
-        
+        transparency_0_shortcut = QShortcut(QKeySequence(Qt.Key_0), self)
+        transparency_0_shortcut.activated.connect(self.transparencyAdd)  # 0 to make less transparent (increase alpha)
+
         clear_shortcut = QShortcut(QKeySequence(Qt.Key_X), self)
         clear_shortcut.activated.connect(self.clearEmit)
+
+        # Arrow keys to move window position
+        left_arrow_shortcut = QShortcut(QKeySequence(Qt.ALT + Qt.Key_Left), self)
+        left_arrow_shortcut.activated.connect(lambda: self.moveWindow(-10, 0))
+
+        right_arrow_shortcut = QShortcut(QKeySequence(Qt.ALT + Qt.Key_Right), self)
+        right_arrow_shortcut.activated.connect(lambda: self.moveWindow(10, 0))
+
+        up_arrow_shortcut = QShortcut(QKeySequence(Qt.ALT + Qt.Key_Up), self)
+        up_arrow_shortcut.activated.connect(lambda: self.moveWindow(0, -10))
+
+        down_arrow_shortcut = QShortcut(QKeySequence(Qt.ALT + Qt.Key_Down), self)
+        down_arrow_shortcut.activated.connect(lambda: self.moveWindow(0, 10))
         
         top_shortcut = QShortcut(QKeySequence(Qt.Key_B), self)
         top_shortcut.activated.connect(self.toggleTop)
-        
+
         move_shortcut = QShortcut(QKeySequence(Qt.Key_Space), self)
         move_shortcut.activated.connect(self.move_monitor)
+
+        # T key to change model, language, and minimum speech time
+        t_shortcut = QShortcut(QKeySequence(Qt.Key_T), self)
+        t_shortcut.activated.connect(self.changeSettings)
         
         
         # Setup fullscreen shortcut
-        fullscreen_shortcut = QShortcut(QKeySequence("Return"), self)
+        fullscreen_shortcut = QShortcut(QKeySequence(Qt.Key_F), self)
         fullscreen_shortcut.activated.connect(self.fullscreen)
+
+        # Ctrl+W to quit the application (app-only shortcut)
+        quit_shortcut = QShortcut(QKeySequence(Qt.CTRL + Qt.Key_W), self)
+        quit_shortcut.activated.connect(self.end)
+
         fullwidth_shortcut = QShortcut(QKeySequence(Qt.Key_W), self)
         fullwidth_shortcut.activated.connect(self.fullwidth)
         fullheight_shortcut = QShortcut(QKeySequence(Qt.Key_H), self)
@@ -125,19 +171,41 @@ class CaptionerGUI(QMainWindow):
         self.previous_value = self.scroll_area.verticalScrollBar().value()
         self.scroll_area.verticalScrollBar().valueChanged.connect(self.new_scroll)
         QApplication.instance().installEventFilter(self)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Initialize the lastGeometry when the window is first shown
+        if self.lastGeometry.width() <= 0:
+            self.lastGeometry = self.geometry()
+
+    def resizeEvent(self, event):
+        # Handle resize events to maintain proper state
+        if not self.isFullScreen():
+            # Only save geometry if not in fullscreen mode
+            self.lastGeometry = self.geometry()
+        super().resizeEvent(event)
+
     def fullscreen(self):
         # Get the current screen geometry
         desktop = QDesktopWidget()
         screen_geometry = desktop.screenGeometry(self.monitor - 1)
-        if self.lastGeometry.width() <= 0:
+        if not self.isFullScreen():
+            # Save current window geometry before going fullscreen
             self.lastGeometry = self.geometry()
             # Set the window to cover the entire screen
-            self.setGeometry(screen_geometry)
             self.showFullScreen()
         else:
-            self.setGeometry(self.lastGeometry)
-            self.lastGeometry = QRect(0, 0, 0, 0)
-        self.write(f"Set to fullscreen with geometry: {screen_geometry}")
+            # Restore to last geometry when exiting fullscreen
+            if self.lastGeometry.width() > 0:
+                # Make sure we're not showing fullscreen anymore
+                self.showNormal()  # Exit fullscreen mode first
+                self.setGeometry(self.lastGeometry)
+                self.lastGeometry = QRect(0, 0, 0, 0)
+            else:
+                # Fallback to default geometry if no previous geometry was saved
+                self.showNormal()  # Exit fullscreen mode first
+                self.setup_geometry()
+        self.write(f"Fullscreen toggle - Current state: {self.isFullScreen()}")
     def fullwidth(self):
         # Get the current screen geometry
         desktop = QDesktopWidget()
@@ -221,10 +289,141 @@ class CaptionerGUI(QMainWindow):
             return
         self.fontSize += factor
         self.styling()
+
+    def moveWindow(self, dx, dy):
+        """Move the window by dx, dy pixels"""
+        current_pos = self.pos()
+        new_x = current_pos.x() + dx
+        new_y = current_pos.y() + dy
+        self.move(new_x, new_y)
     def zoomIn(self):
         self.zoom(self.zoomFactor)
     def zoomOut(self):
         self.zoom(-self.zoomFactor)
+
+    def changeSettings(self):
+        """Prompt for model, language, and minimum speech time changes"""
+        if not self.speech:
+            return
+
+        # Import dialog modules if not already available
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QDoubleSpinBox
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Change Settings")
+        dialog.setModal(True)
+
+        layout = QVBoxLayout()
+
+        # Model selection
+        model_layout = QHBoxLayout()
+        model_layout.addWidget(QLabel("Model:"))
+        model_combo = QComboBox()
+        model_combo.addItems([
+            "tiny", "base", "small", "medium", "large", "large-v2", "large-v3",
+            "tiny.en", "base.en", "small.en", "medium.en"
+        ])
+        # Set current model
+        current_model_index = model_combo.findText(self.speech.args['model_name'])
+        if current_model_index >= 0:
+            model_combo.setCurrentIndex(current_model_index)
+        model_layout.addWidget(model_combo)
+        layout.addLayout(model_layout)
+
+        # Language input
+        lang_layout = QHBoxLayout()
+        lang_layout.addWidget(QLabel("Language:"))
+        lang_input = QLineEdit()
+        lang_input.setText(self.speech.args.get('lang', '') or '')
+        lang_layout.addWidget(lang_input)
+        layout.addLayout(lang_layout)
+
+        # Minimum speech time
+        time_layout = QHBoxLayout()
+        time_layout.addWidget(QLabel("Min Speech Time:"))
+        time_spinbox = QDoubleSpinBox()
+        time_spinbox.setRange(0.1, 30.0)
+        time_spinbox.setSingleStep(0.1)
+        time_spinbox.setValue(self.speech.recording_scale)  # Using recording_scale as the time factor
+        time_layout.addWidget(time_spinbox)
+        layout.addLayout(time_layout)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+        ok_button = QPushButton("OK")
+        cancel_button = QPushButton("Cancel")
+        ok_button.clicked.connect(dialog.accept)
+        cancel_button.clicked.connect(dialog.reject)
+        button_layout.addWidget(ok_button)
+        button_layout.addWidget(cancel_button)
+        layout.addLayout(button_layout)
+
+        dialog.setLayout(layout)
+
+        if dialog.exec_() == QDialog.Accepted:
+            # Update speech settings
+            new_model = model_combo.currentText()
+            new_lang = lang_input.text() or None
+            new_time_scale = time_spinbox.value()
+
+            # Update the speech object
+            self.speech.args['model_name'] = new_model
+            self.speech.args['lang'] = new_lang
+            self.speech.recording_scale = new_time_scale
+
+            # Restart the audio recorder with new settings
+            self.restartAudioRecorder(new_model, new_lang, new_time_scale)
+
+    def restartAudioRecorder(self, model_name, language, time_scale):
+        """Restart the audio recorder with new settings"""
+        if not self.speech:
+            return
+
+        try:
+            # Stop the current recorder safely
+            self.speech.stop = True
+            if self.speech.recorder:
+                try:
+                    self.speech.recorder.stop()
+                except:
+                    pass  # Ignore errors during stop
+                self.speech.recorder = None
+
+            # Update the settings
+            self.speech.args['model_name'] = model_name
+            self.speech.args['lang'] = language
+            self.speech.recording_scale = time_scale
+
+            # Update the minimum length calculation
+            self.speech.min_length = self.speech.get_min_length_of_recording()
+
+            # Restart the transcription thread with new settings
+            import threading
+            self.speech.stop = False
+            transcription_thread = threading.Thread(target=self.speech.main_program)
+            transcription_thread.daemon = True
+            transcription_thread.start()
+
+        except Exception as e:
+            print(f"Error restarting audio recorder: {e}")
+
+    def resizeWidth(self, factor):
+        """Change window width"""
+        if factor == 0:
+            return
+        current_width = self.width()
+        new_width = current_width + factor
+        if new_width > 0:  # Make sure width is positive
+            self.resize(new_width, self.height())
+
+    def resizeHeight(self, factor):
+        """Change window height"""
+        if factor == 0:
+            return
+        current_height = self.height()
+        new_height = current_height + factor
+        if new_height > 0:  # Make sure height is positive
+            self.resize(self.width(), new_height)
     def transparency(self, factor):
         if factor == 0 or self.alpha + factor <= 0 or self.alpha + factor > 255:
             return
@@ -249,12 +448,42 @@ class CaptionerGUI(QMainWindow):
     def end(self):
         #print(self.speech)
         self.write("End")
-        self.log.close_log_file()
+        if self.log:
+            self.log.close_log_file()
         if self.speech:
             self.speech.stop = True
             #print(self.speech.stop)
-            self.speech.recorder.stop()
+            if self.speech.recorder:
+                try:
+                    # Stop the recorder in a separate thread with a timeout to prevent blocking the UI
+                    import threading
+
+                    # Create a flag to track if the stop operation completed
+                    stop_completed = threading.Event()
+
+                    def stop_recorder():
+                        try:
+                            if self.speech and self.speech.recorder:
+                                self.speech.recorder.stop()
+                        finally:
+                            stop_completed.set()
+
+                    # Start the stop operation in a background thread
+                    stop_thread = threading.Thread(target=stop_recorder, daemon=True)
+                    stop_thread.start()
+
+                    # Wait for a short period (e.g., 1 second) for the stop to complete
+                    if not stop_completed.wait(timeout=1.0):
+                        # If it didn't complete in time, proceed with quit anyway
+                        pass
+
+                except:
+                    pass  # Continue to quit even if setting up the thread fails
+        # Force quit the application with SIGKILL
+        import os
+        import signal
         QApplication.quit()
+        os.kill(os.getpid(), signal.SIGKILL)
         """if os.name == 'nt':
             os._exit(1)
         else:
@@ -295,16 +524,43 @@ class CaptionerGUI(QMainWindow):
             self.mouseMovePos = None
             event.accept()
 
+    def wheelEvent(self, event):
+        # Handle Ctrl+Scroll for font size
+        if event.modifiers() == Qt.CTRL:
+            # Get the angle delta (positive for up, negative for down)
+            delta = event.angleDelta().y()
+            if delta > 0:
+                self.zoomIn()
+            else:
+                self.zoomOut()
+            event.accept()
+        else:
+            # Pass the event to the parent for normal scrolling
+            super().wheelEvent(event)
+
     def styling(self):
         self.write("Style change ", self.fontSize, self.alpha)
         self.scroll_area.setStyleSheet(f"font-size: {self.fontSize}px; color: white; background-color: rgba(0, 0, 0, {self.alpha});")
         self.caption_label.setStyleSheet(f"background-color: rgba(0, 0, 0, {self.alpha});")
+
+    @pyqtSlot(bool)
+    def updateRecordingStatus(self, enabled):
+        self.recording_enabled = enabled
+        self.update()
 
     def paintEvent(self, event):
         opt = QStyleOption()
         opt.initFrom(self)
         painter = QPainter(self)
         self.style().drawPrimitive(QStyle.PE_Widget, opt, painter, self)
+
+        if not self.recording_enabled:
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setBrush(QColor("red"))
+            painter.setPen(Qt.NoPen)
+            radius = 10
+            margin = 5
+            painter.drawEllipse(self.width() - radius * 2 - margin, margin, radius * 2, radius * 2)
 
     def editCaption(self, new_caption):
         self.caption_label.setText(new_caption)
@@ -323,12 +579,33 @@ class CaptionerGUI(QMainWindow):
         return text.lower().strip().translate(str.maketrans('', '', string.punctuation))
 
     def is_similar(self, new_text, existing_lines, threshold=0.8, recent_count=7):
+        # Limit text length to prevent performance issues with large texts
+        if len(new_text) > 100:  # Limit to first 100 characters for comparison
+            new_text = new_text[:100]
+
         # Get the most recent lines
         recent_lines = existing_lines[-recent_count:]
-        vectorizer = TfidfVectorizer().fit_transform([new_text] + recent_lines)
-        vectors = vectorizer.toarray()
-        csim = cosine_similarity(vectors)
-        return any(csim[0][i] > threshold for i in range(1, len(csim)))
+
+        # Limit length of existing lines too
+        limited_lines = []
+        for line in recent_lines:
+            if len(line) > 100:
+                limited_lines.append(line[:100])
+            else:
+                limited_lines.append(line)
+
+        # Only proceed if there are lines to compare
+        if not limited_lines:
+            return False
+
+        try:
+            vectorizer = TfidfVectorizer().fit_transform([new_text] + limited_lines)
+            vectors = vectorizer.toarray()
+            csim = cosine_similarity(vectors)
+            return any(csim[0][i] > threshold for i in range(1, len(csim)))
+        except:
+            # If similarity checking fails, return False to allow text to be added
+            return False
     
     @pyqtSlot(str)
     def addNewLine(self, text):
@@ -336,7 +613,9 @@ class CaptionerGUI(QMainWindow):
             # Normalize the incoming text
             normalized_text = self.normalize_text(text)
             # Create a list of normalized lines for similarity checking
-            normalized_lines = [self.normalize_text(line) for line in self.lines]
+            # Only check against a limited number of recent lines to avoid performance issues
+            recent_lines = self.lines[-20:]  # Only check last 20 lines
+            normalized_lines = [self.normalize_text(line) for line in recent_lines]
 
             # Check for similarity with existing lines
             if self.is_similar(normalized_text, normalized_lines):
@@ -356,8 +635,17 @@ class CaptionerGUI(QMainWindow):
                 del self.lines[0]
 
         self.caption_label.setText('\n'.join(self.lines))
-        self.log.write_log(f'{text}')
+        # Write log in a separate thread to avoid blocking the UI
+        if self.log:
+            QMetaObject.invokeMethod(self, "_write_log", Qt.QueuedConnection,
+                                    Q_ARG(str, text))
         self.update_scroll_position()
+
+    @pyqtSlot(str)
+    def _write_log(self, text):
+        """Thread-safe method to write log"""
+        if self.log:
+            self.log.write_log(f'{text}')
     def new_scroll(self) -> None:
         current_value = self.scroll_area.verticalScrollBar().value()
         max_value = self.scroll_area.verticalScrollBar().maximum()
