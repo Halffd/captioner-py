@@ -47,6 +47,9 @@ class Speech:
             try:
                 # Stop the recorder to terminate recording
                 self.recorder.stop()
+                # Add a small delay to allow the recorder to stop
+                import time
+                time.sleep(0.1)
             except Exception as e:
                 print(f"Error stopping recorder: {e}")
                 pass
@@ -147,6 +150,7 @@ class Speech:
                     # Check stop flag before each blocking call
                     if self.stop:
                         break
+                    # Use a timeout pattern if possible, though RealtimeSTT may not support this directly
                     recorder.text(self.process_text)
                 except Exception as e:
                     if self.stop:
@@ -154,6 +158,10 @@ class Speech:
                     print(f"Error in recording: {e}")
                     # Short sleep to allow other threads to process stop commands
                     time.sleep(0.01)
+
+                # Extra check to ensure immediate response to stop
+                if self.stop:
+                    break
 
         except KeyboardInterrupt:
             print("Keyboard interrupt received")
