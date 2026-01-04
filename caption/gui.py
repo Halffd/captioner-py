@@ -454,17 +454,13 @@ class CaptionerGUI(QMainWindow):
             except:
                 pass
         if self.speech:
+            # Call the speech cleanup method to ensure proper cleanup
+            try:
+                self.speech.cleanup()
+            except:
+                pass
+            # Also set the stop flag directly as backup
             self.speech.stop = True
-            if self.speech.recorder:
-                try:
-                    # Force stop the recorder
-                    self.speech.recorder.stop()
-                    # Set recorder to None to ensure it's cleaned up
-                    self.speech.recorder = None
-                except:
-                    pass  # Continue to quit even if recorder stop fails
-            # Also set speech to None to ensure cleanup
-            self.speech = None
         # Close and delete all UI elements to ensure cleanup
         try:
             self.close()  # Close the main window
