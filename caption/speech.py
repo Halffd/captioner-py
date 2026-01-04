@@ -45,11 +45,14 @@ class Speech:
         self.stop = True
         if self.recorder:
             try:
-                # Stop the recorder with a timeout to prevent hanging
+                # Stop the recorder to terminate recording
                 self.recorder.stop()
             except Exception as e:
                 print(f"Error stopping recorder: {e}")
                 pass
+            finally:
+                # Ensure recorder is set to None after stopping
+                self.recorder = None
 
     def process_text(self, text):
         if not self.recording_enabled:
@@ -171,8 +174,8 @@ class Speech:
     def start(self):
         control = input.Input(self.args)
         logger = log.Log(self.args)
-        
-        transcription_thread = threading.Thread(target=self.main_program)
+
+        transcription_thread = threading.Thread(target=self.main_program, daemon=True)
         transcription_thread.start()
 
         try:
@@ -185,9 +188,9 @@ class Speech:
                 self.ui.run()
             elif self.args.get('web', False):
                 web.Web(self.args).start_server()
-            
-            # Wait for transcription to complete
-            transcription_thread.join()
+
+            # Don't wait for transcription thread to complete since it might be blocked
+            # The daemon thread will be automatically terminated when the main program exits
         except KeyboardInterrupt:
             print("\nReceived keyboard interrupt. Exiting...")
         except Exception as e:
