@@ -455,34 +455,14 @@ class CaptionerGUI(QMainWindow):
             #print(self.speech.stop)
             if self.speech.recorder:
                 try:
-                    # Stop the recorder in a separate thread with a timeout to prevent blocking the UI
-                    import threading
-
-                    # Create a flag to track if the stop operation completed
-                    stop_completed = threading.Event()
-
-                    def stop_recorder():
-                        try:
-                            if self.speech and self.speech.recorder:
-                                self.speech.recorder.stop()
-                        finally:
-                            stop_completed.set()
-
-                    # Start the stop operation in a background thread
-                    stop_thread = threading.Thread(target=stop_recorder, daemon=True)
-                    stop_thread.start()
-
-                    # Wait for a short period (e.g., 1 second) for the stop to complete
-                    if not stop_completed.wait(timeout=1.0):
-                        # If it didn't complete in time, proceed with quit anyway
-                        pass
-
+                    # Stop the recorder with a quick timeout to avoid hanging
+                    self.speech.recorder.stop()
                 except:
-                    pass  # Continue to quit even if setting up the thread fails
-        # Quit the application gracefully
+                    pass  # Continue to quit even if recorder stop fails
+        # Quit the application
         QApplication.quit()
         import sys
-        # Exit the Python interpreter to ensure clean termination
+        # Exit the Python interpreter to ensure termination
         sys.exit(0)
         """if os.name == 'nt':
             os._exit(1)
