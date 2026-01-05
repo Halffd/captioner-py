@@ -99,15 +99,17 @@ class CaptionerGUI(QMainWindow):
         
         self.setup_geometry()
         # Create shortcuts for the global hotkeys
-        
-        zoom_in_shortcut = QShortcut(QKeySequence(Qt.Key_Equal), self)
-        zoom_in_shortcut.activated.connect(self.zoomIn)
 
-        # Also support Shift+Equals for font size
-        shift_plus_shortcut = QShortcut(QKeySequence(Qt.SHIFT + Qt.Key_Plus), self)
-        shift_plus_shortcut.activated.connect(self.zoomIn)
+        # Support + and = keys for zooming in (font size increase)
+        # Standard shortcuts for increasing font size
+        plus_shortcut = QShortcut(QKeySequence(Qt.Key_Plus), self)
+        plus_shortcut.activated.connect(self.zoomIn)
+
+        equal_shortcut = QShortcut(QKeySequence(Qt.Key_Equal), self)
+        equal_shortcut.activated.connect(self.zoomIn)
 
         # Use different shortcuts for window resizing to avoid conflicts
+        # Keep original Shift shortcuts for window resizing
         shift_equals_shortcut = QShortcut(QKeySequence("Shift+="), self)
         shift_equals_shortcut.activated.connect(lambda: self.resizeWidth(50))
 
@@ -120,12 +122,9 @@ class CaptionerGUI(QMainWindow):
         ctrl_down_shortcut = QShortcut(QKeySequence(Qt.CTRL + Qt.Key_Down), self)
         ctrl_down_shortcut.activated.connect(lambda: self.resizeHeight(-50))
 
-        zoom_out_shortcut = QShortcut(QKeySequence(Qt.Key_Minus), self)
-        zoom_out_shortcut.activated.connect(self.zoomOut)
-
-        # Also support Shift+Minus for font size
-        shift_minus_shortcut = QShortcut(QKeySequence(Qt.SHIFT + Qt.Key_Minus), self)
-        shift_minus_shortcut.activated.connect(self.zoomOut)
+        # Support - key for zooming out (font size decrease)
+        minus_shortcut = QShortcut(QKeySequence(Qt.Key_Minus), self)
+        minus_shortcut.activated.connect(self.zoomOut)
 
         top_shortcut = QShortcut(QKeySequence(Qt.Key_Home), self)
         top_shortcut.activated.connect(self.toTop)
