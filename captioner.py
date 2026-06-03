@@ -1,6 +1,9 @@
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["TQDM_DISABLE"] = "1"
+
 import model
 import sys
-import os
 import caption.speech as speech
 
 if __name__ == "__main__":

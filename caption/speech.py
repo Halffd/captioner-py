@@ -1,5 +1,7 @@
 import os
 import sys
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["TQDM_DISABLE"] = "1"
 cpu_threads = os.cpu_count()
 os.environ["OMP_NUM_THREADS"] = str(cpu_threads)
 os.environ["MKL_NUM_THREADS"] = str(cpu_threads)
@@ -16,8 +18,44 @@ import caption.log as log
 import logging
 import atexit
 
-# Suppress ALSA warnings
-os.environ['ALSA_CARD'] = 'default'
+def resolve_audio_device(device_spec):
+    """Resolve a device spec (name string or index) to a PyAudio device index.
+    Returns None to use default device."""
+    if device_spec is None:
+        return None
+    try:
+        import pyaudio
+        p = pyaudio.PyAudio()
+        if device_spec.isdigit():
+            idx = int(device_spec)
+            if 0 <= idx < p.get_device_count():
+                p.terminate()
+                return idx
+            print(f"Warning: device index {idx} out of range, using default")
+            p.terminate()
+            return None
+        device_lower = device_spec.lower()
+        for i in range(p.get_device_count()):
+            dev = p.get_device_info_by_index(i)
+            if device_lower in dev['name'].lower():
+                p.terminate()
+                return i
+        print(f"Warning: device '{device_spec}' not found, using default")
+        p.terminate()
+        return None
+    except Exception as e:
+        print(f"Error resolving audio device: {e}")
+        return None
+
+def is_output_device_spec(device_spec):
+    """Check if device spec refers to an output (monitor) device."""
+    if device_spec is None:
+        return False
+    if device_spec.startswith("PulseAudio:monitor") or device_spec.startswith("pulse:monitor"):
+        return True
+    if device_spec.startswith("pipewire:monitor") or device_spec.startswith("pw:monitor"):
+        return True
+    return False
 
 DEBUG = False
 if DEBUG:
@@ -118,17 +156,31 @@ class Speech:
         try:
             import time
             print("Initializing audio recorder...")
-            # Initialize the recorder with current settings
+
+            input_dev = self.args.get('input_device')
+            output_dev = self.args.get('output_device')
+
+            input_device_index = resolve_audio_device(input_dev)
+
+            if output_dev:
+                import pyaudio
+                p = pyaudio.PyAudio()
+                out_idx = resolve_audio_device(output_dev)
+                if out_idx is not None:
+                    out_dev_info = p.get_device_info_by_index(out_idx)
+                    if 'pulse' in out_dev_info['name'].lower() or out_dev_info['hostApi'] == 1:
+                        os.environ['PULSE_SOURCE'] = out_dev_info['name']
+                        print(f"Using output monitor: {out_dev_info['name']}")
+                p.terminate()
+
             recorder = AudioToTextRecorder(
                 spinner=True,
                 model=self.args['model_name'],
                 device='cpu',
                 language=self.args['lang'],
                 enable_realtime_transcription=self.args['realtime'],
-#                use_microphone=self.args['use_microphone'],
-#                model_path=None,
+                input_device_index=input_device_index,
                 realtime_model_type=self.args['realtime_model'],
-                #level=logging.DEBUG,
                 debug_mode=True,
                 webrtc_sensitivity=0,
                 min_length_of_recording=self.get_min_length_of_recording() / 3,
